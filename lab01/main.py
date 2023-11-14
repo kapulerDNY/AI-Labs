@@ -1,130 +1,90 @@
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
 import numpy as np
 import matplotlib.pyplot as plt
-
-def shift_mean(data):
-    means = [np.mean(data[i:]) for i in range(len(data))]
-    return means
-
-def calc_score(data, k_list): #Используется Silhouette Score поэтому наибольше значение 6 , а не 5 если делать кластерезацию через К средних
-
-    scores = []
-    for k in k_list:
-        kmeans = KMeans(n_clusters=k, random_state=0).fit(data)
-        labels = kmeans.labels_
-        scores.append(silhouette_score(data, labels))
-    return scores
-
-
-#def elbow_method(data, max_clusters=15):
- #   distortions = []
-  #  for i in range(1, max_clusters + 1):
-   #     kmeans = KMeans(n_clusters=i, random_state=0)
-    #    kmeans.fit(data)
-     #   distortions.append(kmeans.inertia_)  # inertia_ содержит сумму квадратов расстояний
-
-
-    #plt.plot(range(1, max_clusters + 1), distortions, marker='o')
-    #plt.title('Метод смещения среднего')
-    #plt.show()
+from sklearn.cluster import KMeans, MeanShift
+from sklearn.metrics import silhouette_score
 
 
 data = np.loadtxt("test.txt")
 
+# 1. методом зсуву середнего визначає кількість кластерів розбиття
+def meanShift(data):
+    bandwidth = MeanShift(bandwidth=None)
+    bandwidth.fit(data)
+    return len(np.unique(bandwidth.labels_)), bandwidth.cluster_centers_
 
-means = shift_mean(data)
-optimal_clusters = np.argmax(means) + 1
+# 2. Оценка score
+def calc_score(data, max_clusters=15):
+    scores = []
+    for n_clusters in range(2, max_clusters + 1):
+        kmeans = KMeans(n_clusters=n_clusters)
+        kmeans.fit(data)
+        score = silhouette_score(data, kmeans.labels_)
+        scores.append(score)
+    return scores
 
+# 3. проводить кластеризацію методом k-середних з оптимальною кількістю кластерів
+def kmeans_clustering(data, n_clusters):
+    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans.fit(data)
+    return kmeans.labels_, kmeans.cluster_centers_
 
-k_list = np.arange(2, 15)
-scores = calc_score(data, k_list)
+# 1. методом зсуву середнего визначає кількість кластерів розбиття,
+num_clusters_shift, meanshift_centers = meanShift(data)
 
+# потім оцінити score для різних вариіантів кластеризації (кількість кластерів від 2 до 15) в функций от 2 до 15 + 1 - то есть включительно
+cluster_scores = calc_score(data)
 
-kmeans = KMeans(n_clusters=optimal_clusters, random_state=0).fit(data) # методом смещения среднего (shift_mean) используется для определения оптимального числа кластеров (как по заданию), потом используем  K-средних
-labels = kmeans.labels_
+# оптимальною кількістю кластерів
+optimal_num_clusters = np.argmax(cluster_scores) + 2
 
+# проводить кластеризацію методом k-середних з оптимальною кількістю кластерів
+kmeans_labels, kmeans_centers = kmeans_clustering(data, optimal_num_clusters)
 
 
 plt.figure(1)
-plt.scatter(data[:, 0], data[:, 1])
-plt.title('1. Вихідні точки на площині')
-
-
-
+# 1. Вихідні точки на площині
+plt.scatter(data[:, 0], data[:, 1], c='black', marker='o')
+plt.title('Исходные точки')
 
 plt.figure(2)
-plt.bar(np.arange(2, 15), scores)
-plt.xlabel('2 - 15')
-plt.title('3. Бар діаграмма score(number of clusters)')
-
-
+# 2. Центри кластерів (метод зсуву середнего)
+plt.scatter(data[:, 0], data[:, 1], c='black', marker='o')
+plt.scatter(meanshift_centers[:, 0], meanshift_centers[:, 1], c='red', marker='x')
+plt.title('Центры кластеров (сдвиг среднего)')
 
 plt.figure(3)
+# 3. Бар диаграмма score(number of clusters)
+plt.bar(range(2, 16), cluster_scores)
+plt.title('Бар диаграмма score(number of clusters)')
+plt.xlabel('Количество кластеров')
 
-centers = kmeans.cluster_centers_
-
-plt.scatter(data[:, 0], data[:, 1])
-
-
-for center in centers:
-    plt.scatter(centers[:, 0], centers[:, 1], marker="x", c="red")
-
-plt.title('2. Центри кластерів (k-cредних)') #Добавил рисунок т.к кластерзацию данных я произвожу через к средних ниже код для метода зсува среднего
-plt.show()
 
 plt.figure(4)
-optimal_means = shift_mean(data)
-optimal_clusters_shift = np.argmax(optimal_means) + 1
+# 4. Кластеризованные данные с областями кластеризации(k-средних)
+plt.scatter(data[:, 0], data[:, 1], c=kmeans_labels, marker='o')
+plt.scatter(kmeans_centers[:, 0], kmeans_centers[:, 1], c='red', marker='x')
+plt.title('Кластеризованные данные с областями кластеризации (k-средних)')
 
-
-plt.scatter(data[:, 0], data[:, 1])
-
-kmeans_shift = KMeans(n_clusters=optimal_clusters_shift, random_state=0).fit(data)
-centers_shift = kmeans_shift.cluster_centers_
-
-for center in centers_shift:
-    plt.scatter(center[0], center[1], marker="x", c="red")
-
-
-plt.title('2. Центри кластерів (метод зсуву середнего)')
 plt.show()
-
 
 plt.figure(5)
 
 
-for k in range(optimal_clusters):
-    points = data[labels == k]
+for k in range(optimal_num_clusters):
+    points = data[kmeans_labels == k]
 
     x_min = points[:, 0].min()
     x_max = points[:, 0].max()
     y_min = points[:, 1].min()
     y_max = points[:, 1].max()
     plt.fill_between([x_min, x_max], [y_min, y_min], [y_max, y_max],
-                     color=plt.cm.Spectral(k / (len(np.unique(labels)) - 1)), alpha=0.1)
+                     color=plt.cm.Spectral(k / (len(np.unique(kmeans_labels)) - 1)), alpha=0.1)
 
     plt.plot([x_min, x_max], [y_min, y_min], color="black", linewidth=0.5)
     plt.plot([x_min, x_max], [y_max, y_max], color="black", linewidth=0.5)
     plt.plot([x_min, x_min], [y_min, y_max], color="black", linewidth=0.5)
     plt.plot([x_max, x_max], [y_min, y_max], color="black", linewidth=0.5)
 
-plt.title('4. Кластеризованные данные с областями кластеризации')
+plt.title('4. Кластеризованные данные с областями кластеризации(Области)')
 plt.legend()
 plt.show()
-
-
-
-plt.figure(6)
-
-for k in range(optimal_clusters):
-    points = data[labels == k]
-    plt.scatter(points[:, 0], points[:, 1])
-plt.title('4. Кластеризованные данные с областями кластеризации')
-
-plt.show()
-
-
-#elbow_method(data)
-
-
